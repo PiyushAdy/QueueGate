@@ -26,12 +26,13 @@ async function joinQueue(eventId :string ,clientId :string){
                 clientId,
                 ticketNum: currentSeq,
                 queueTokenHash,
+                "status":"waiting",
             });
             return{
                 "queueId" : queueId,
                 "ticketNum" : currentSeq,
                 "currentPos" :  currentSeq,
-                "queueToken": queueToken
+                "queueToken": queueToken,
             }
         }
     }catch(error){
@@ -40,4 +41,29 @@ async function joinQueue(eventId :string ,clientId :string){
     }
 }
 
-export {joinQueue};
+
+async function getQueueStatus(eventId:string , queueId:string){
+    const queueData=await redis.hgetall(`event:${eventId}:queueDetails:${queueId}`);
+    if (Object.keys(queueData).length==0){
+        return{
+            "error" : "Invalid Queue ID"
+        };
+    }
+    const clientId=queueData.clientId;
+    if (!clientId){
+        return{
+            "error" : "Invalid Client ID"
+        };
+    }
+    const rank=await redis.zrank(`event:${eventId}:queue`, clientId);
+    const currentPos=(rank!==null) ? rank+1 : null;
+    const totalWaiting=await redis.zcard(`event:${eventId}:queue`);
+    
+    return {
+        "status":queueData.status,
+        "tiketNum":queueData.ticketNum,
+        "currentPos": currentPos,
+        "totalWaiting":totalWaiting
+    }
+}
+export {joinQueue, getQueueStatus};

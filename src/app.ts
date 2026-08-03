@@ -1,7 +1,8 @@
 import express,{type NextFunction, type Request,type Response} from "express";
 import {addEvent, getEvent} from "../src/services/eventService.js"
-import {joinQueue} from "../src/services/queueService.js"
+import {joinQueue , getQueueStatus} from "../src/services/queueService.js"
 import { Client } from "pg";
+import redis from "./redis/client.js";
 const app = express();
 
 
@@ -71,6 +72,36 @@ app.post("/events/:eventId/join",async function(req :Request,res :Response){
     }
     return res.status(200).json({
         status:"Success",
+        ...result
+    })
+})
+
+app.get("/events/:eventId/queue/:queueId",async function(req :Request,res :Response){
+    let eventId;
+    if (req.params.eventId){
+        eventId=(Array.isArray(req.params.eventId)) ? req.params.eventId[0] : req.params.eventId;
+    }
+    let queueId;
+    if (req.params.queueId){
+        queueId=(Array.isArray(req.params.queueId)) ? req.params.queueId[0] : req.params.queueId;
+    }
+    if (!queueId ){
+        return res.status(400).json({
+            "status":"Invalid params supplied"
+        });
+    }
+    if (!eventId){
+        return res.status(400).json({
+            "status":"Invalid params supplied"
+        });
+    }
+    const result=await getQueueStatus(eventId,queueId);
+    if (!result){
+        return res.status(500).json({
+            "status":"Error Occured while getting queueState" 
+        });
+    }
+    return res.status(200).json({
         ...result
     })
 })
