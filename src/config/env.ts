@@ -15,3 +15,7 @@ export const PGconnectionString=(`postgres://${PG_USER}:${PG_PASS}@${PG_HOST}:${
 
 export const REDIS_HOST=(process.env.REDIS_HOST || "localhost");
 export const REDIS_PORT=(Number(process.env.REDIS_PORT) || 6379);
+export const DEFAULT_REDIS_BATCH_SIZE = Number(process.env.DEFAULT_BATCH_SIZE) || 50;
+
+// process.env.PORT="Hello";
+// console.log(process.env.PORT);

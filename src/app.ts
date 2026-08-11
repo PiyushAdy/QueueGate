@@ -5,7 +5,6 @@ import { Client } from "pg";
 import redis from "./redis/client.js";
 const app = express();
 
-
 app.use(express.json());
 
 app.get("/health",(_req :Request,res :Response)=>{
