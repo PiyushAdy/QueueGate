@@ -1,8 +1,9 @@
 import express,{type NextFunction, type Request,type Response} from "express";
-import {addEvent, getEvent, getEventSummary, getAllEvents} from "../src/services/eventService.js"
-import {joinQueue , getQueueStatus} from "../src/services/queueService.js"
 import { Client } from "pg";
-import { confirmBooking } from "../src/services/bookingService.js";
+import {addEvent, getEvent, getEventSummary, getAllEvents} from "./services/eventService.js"
+import {joinQueue , getQueueStatus} from "./services/queueService.js"
+import { confirmBooking } from "./services/bookingService.js";
+
 import redis from "./redis/client.js";
 const app = express();
 
@@ -106,7 +107,7 @@ app.post("/events/:eventId/book",async function(req :Request,res :Response){
     
     const { clientId, queueId, queueTokenHash } = req.body;
     
-    if (!clientId || !queueId || !queueTokenHash){
+    if (!clientId || !queueId || !queueTokenHash || !eventId){
         return res.status(400).json({
             status: "Invalid params supplied. Need clientId, queueId, and queueTokenHash"
         });

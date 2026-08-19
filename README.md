@@ -119,7 +119,7 @@ The service serves a lightweight Material 3 web client accessible at `http://loc
 * [Docker & Docker Compose](https://www.docker.com/)
 * [Node.js](https://nodejs.org/) (v18+)
 
-### Installation & Configuration
+### Local Development Setup
 
 1. **Clone the repository:**
    ```bash
@@ -149,7 +149,7 @@ The service serves a lightweight Material 3 web client accessible at `http://loc
 
 6. **Start the application server:**
    ```bash
-   npm start
+   npm run dev
    ```
 
 7. **Access the interface or run tests:**
@@ -158,3 +158,15 @@ The service serves a lightweight Material 3 web client accessible at `http://loc
      ```bash
      npm run load-test
      ```
+
+### Production Docker Deployment
+
+For production-like environments, the repository includes a multi-stage `Dockerfile` and a production compose file. This setup compiles the TypeScript code, drops heavy `devDependencies`, explicitly copies necessary static assets (like `.lua` and `.sql` scripts), and networks the containers internally.
+
+1. **Build and start the entire cluster (API, Redis, PostgreSQL):**
+   ```bash
+   docker compose -f docker-compose.prod.yml up --build -d
+   ```
+
+2. **Access the Web Client:** 
+   Open `http://localhost:3000` (or your configured port) in your browser.
