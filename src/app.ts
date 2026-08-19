@@ -1,12 +1,14 @@
 import express,{type NextFunction, type Request,type Response} from "express";
-import {addEvent, getEvent} from "../src/services/eventService.js"
+import {addEvent, getEvent, getEventSummary, getAllEvents} from "../src/services/eventService.js"
 import {joinQueue , getQueueStatus} from "../src/services/queueService.js"
 import { Client } from "pg";
+import { confirmBooking } from "../src/services/bookingService.js";
 import redis from "./redis/client.js";
 const app = express();
 
 app.use(express.json());
-
+import path from "path";
+app.use(express.static(path.join(process.cwd(), "public")));
 app.get("/health",(_req :Request,res :Response)=>{
     return res.json({"status":"ok"});
 })
@@ -26,6 +28,14 @@ app.post("/events",async (req :Request,res :Response)=>{
         "status":"insufficient params passed or some error occured"
     })
 })
+
+app.get("/events", async (req: Request, res: Response) => {
+    const events = await getAllEvents();
+    return res.json({
+        status: "Success",
+        data: events
+    });
+});
 
 app.get("/events/:eventId",async function(req :Request,res :Response){
     let eventId=req.params.eventId;
@@ -50,7 +60,23 @@ app.get("/events/:eventId",async function(req :Request,res :Response){
     })
 })
 
+app.get("/events/:eventId/summary",async function(req :Request,res :Response){
+    let eventId = req.params.eventId;
+    eventId = Array.isArray(eventId) ? eventId[0] : eventId;
+    
+    if (!eventId){
+        return res.status(400).json({ status: "Invalid eventID supplied" });
+    }
 
+    const summary = await getEventSummary(eventId);
+    if (summary) {
+        return res.status(200).json({
+            status: "Success",
+            data: summary
+        });
+    }
+    return res.status(404).json({ status: "Event not found" });
+})
 
 app.post("/events/:eventId/join",async function(req :Request,res :Response){
     let eventId;
@@ -70,9 +96,42 @@ app.post("/events/:eventId/join",async function(req :Request,res :Response){
         });
     }
     return res.status(200).json({
-        status:"Success",
         ...result
     })
+})
+
+app.post("/events/:eventId/book",async function(req :Request,res :Response){
+    let eventId = req.params.eventId;
+    eventId = Array.isArray(eventId) ? eventId[0] : eventId;
+    
+    const { clientId, queueId, queueTokenHash } = req.body;
+    
+    if (!clientId || !queueId || !queueTokenHash){
+        return res.status(400).json({
+            status: "Invalid params supplied. Need clientId, queueId, and queueTokenHash"
+        });
+    }
+    
+    const result = await confirmBooking(eventId, queueId, clientId, queueTokenHash);
+    
+    if (!result.success) {
+        if (result.error === 'NOT_ADMITTED') {
+            return res.status(403).json({ status: "Error", message: "You are not admitted to book yet or your hold expired." });
+        }
+        if (result.error === 'INVALID_TOKEN') {
+            return res.status(401).json({ status: "Error", message: "Invalid queue token." });
+        }
+        if (result.error === 'ALREADY_BOOKED') {
+            return res.status(409).json({ status: "Error", message: "You have already booked a ticket for this event." });
+        }
+        return res.status(500).json({ status: "Error", message: "Internal Server Error" });
+    }
+    
+    return res.status(200).json({
+        status: "Success",
+        message: "Booking confirmed!",
+        bookingId: result.bookingId
+    });
 })
 
 app.get("/events/:eventId/queue/:queueId",async function(req :Request,res :Response){

@@ -1,69 +1,86 @@
-import { randomUUID ,createHash} from "crypto";
-import redis from "../redis/client.js"
+import fs from "fs";
+import path from "path";
+import { randomUUID, createHash } from "crypto";
+import redis from "../redis/client.js";
 
-async function joinQueue(eventId :string ,clientId :string){
-    try{
-        let queueId= await redis.get(`event:${eventId}:${clientId}`);
-        if (queueId){
-            const queueData=await redis.hgetall(`event:${eventId}:queueDetails:${queueId}`);
-            const currentPos=await redis.zrank(`event:${eventId}:queue`,clientId);
-            // zrank returns first position persons rank as 0 so while returning we are adding 1
-            return{
-                "queueId" : queueId,
-                "ticketNum" : queueData.ticketNum,
-                "currentPos" : (1+Number(currentPos))
-            }
+const joinLuaPath = path.join(process.cwd(), "src/redis/lua/joinQueue.lua");
+const joinLuaScript = fs.readFileSync(joinLuaPath, "utf-8");
+
+async function joinQueue(eventId: string, clientId: string) {
+    try {
+        const clientKey = `event:${eventId}:${clientId}`;
+        const seqKey = `event:${eventId}:seq`;
+        const queueSet = `event:${eventId}:queue`;
+
+        const newQueueId = randomUUID();
+        const queueToken = randomUUID();
+        const queueTokenHash = createHash("sha256").update(queueToken).digest("hex");
+        const joinedAt = Date.now().toString();
+
+        const result = (await redis.eval(
+            joinLuaScript,
+            3,
+            clientKey,
+            seqKey,
+            queueSet,
+            clientId,
+            newQueueId,
+            queueTokenHash,
+            joinedAt,
+            eventId
+        )) as string[] | null;
+
+        if (!result || result.length === 0) {
+            return null;
         }
-        // joing queue if not joined before 
-        const currentSeq= await redis.incr(`event:${eventId}:seq`);
-        if (currentSeq){
-            queueId=randomUUID();
-            const queueToken =randomUUID();
-            const queueTokenHash=createHash('sha256').update(queueToken).digest('hex');
-            await redis.zadd(`event:${eventId}:queue`,currentSeq,clientId);
-            await redis.set(`event:${eventId}:${clientId}`,queueId);
-            await redis.hset(`event:${eventId}:queueDetails:${queueId}`, {
-                clientId,
-                ticketNum: currentSeq,
-                queueTokenHash,
-                "status":"waiting",
-            });
-            return{
-                "queueId" : queueId,
-                "ticketNum" : currentSeq,
-                "currentPos" :  currentSeq,
-                "queueToken": queueToken,
-            }
-        }
-    }catch(error){
-        console.error("Error Occured ::",error);
+        const [type, queueId, ticketNum, currentPos, status] = result;
+
+        return {
+            queueId,
+            ticketNum: Number(ticketNum),
+            currentPos: currentPos ? Number(currentPos) : null,
+            status,
+            ...(type === "NEW" ? { queueToken } : {})
+        };
+    } catch (error) {
+        console.error("Error occurred in joinQueue:", error);
         return null;
     }
 }
 
 
-async function getQueueStatus(eventId:string , queueId:string){
-    const queueData=await redis.hgetall(`event:${eventId}:queueDetails:${queueId}`);
-    if (Object.keys(queueData).length==0){
-        return{
-            "error" : "Invalid Queue ID"
+async function getQueueStatus(eventId: string, queueId: string) {
+    const queueData = await redis.hgetall(`event:${eventId}:queueDetails:${queueId}`);
+    if (Object.keys(queueData).length == 0) {
+        return {
+            "error": "Invalid Queue ID"
         };
     }
-    const clientId=queueData.clientId;
-    if (!clientId){
-        return{
-            "error" : "Invalid Client ID"
+    const clientId = queueData.clientId;
+    if (!clientId) {
+        return {
+            "error": "Invalid Client ID"
         };
     }
-    const rank=await redis.zrank(`event:${eventId}:queue`, clientId);
-    const currentPos=(rank!==null) ? rank+1 : null;
-    const totalWaiting=await redis.zcard(`event:${eventId}:queue`);
-    
+    const rank = await redis.zrank(`event:${eventId}:queue`, clientId);
+    const currentPos = (rank !== null) ? rank + 1 : null;
+    const totalWaiting = await redis.zcard(`event:${eventId}:queue`);
+
+    let status = queueData.status;
+    if (status === 'waiting') {
+        const availableInventoryRaw = await redis.hget(`event:${eventId}:details`, "availableInventory");
+        const availableInventory = parseInt(availableInventoryRaw || "0", 10);
+        const activeHolds = await redis.zcard(`event:${eventId}:admitted_holds`);
+        if (availableInventory <= 0 && activeHolds === 0) {
+            status = 'sold_out';
+        }
+    }
+
     return {
-        "status":queueData.status,
-        "tiketNum":queueData.ticketNum,
+        "status": status,
+        "tiketNum": queueData.ticketNum,
         "currentPos": currentPos,
-        "totalWaiting":totalWaiting
+        "totalWaiting": totalWaiting
     }
 }
-export {joinQueue, getQueueStatus};
+export { joinQueue, getQueueStatus };

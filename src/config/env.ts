@@ -2,7 +2,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 let APP_PORT: number = Number(process.env.APP_PORT) || 3000;
-export {APP_PORT};
+let APP_HOST: string = process.env.APP_HOST || "localhost";
+export {APP_PORT, APP_HOST};
 
 
 const PG_USER = process.env.POSTGRES_USER;

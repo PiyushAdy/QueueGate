@@ -34,10 +34,12 @@ local admittedQueueIds = {}
                 'admittedAt', currentTimeMs,
                 'expiresAt', expiresAt
             )
+            redis.call('ZADD', 'event:' .. eventId .. ':admitted_holds', expiresAt, queueId)
+            
             table.insert(admittedQueueIds, queueId)
         end
     end
--- returns list of admitted queueIDs so that we can notify them via websockets from nodejs 
+-- yeh list of admitted queueIDs return karta hai so that we can notify them via websockets from nodejs 
 return admittedQueueIds
 
 

@@ -3,11 +3,21 @@ import { Server as SocketIOServer } from "socket.io";
 import redis from "../redis/client.js";
 import { getQueueStatus } from "../services/queueService.js";
 
+import { createAdapter } from "@socket.io/redis-adapter";
 
 function initSocketGateway(server: HTTPServer) {
     const io = new SocketIOServer(server, {
         cors: { origin: "*" }
     });
+
+    const pubClient = redis.duplicate();
+    const subClient = redis.duplicate();
+    
+    // Add error handlers to prevent unhandled 'missing error handler' crashes
+    pubClient.on("error", (err) => console.log(`Redis PubClient Error :: ${err.message}`));
+    subClient.on("error", (err) => console.log(`Redis SubClient Error :: ${err.message}`));
+    
+    io.adapter(createAdapter(pubClient, subClient));
 
     // middleware
     io.use(async (socket, next) => {
